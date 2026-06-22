@@ -138,13 +138,15 @@ def run_ablation():
     num_fog_nodes = int(p.get("num_fog_nodes", 30))
     episodes      = int(p.get("episodes", 300))
     seed          = int(p.get("seed", 7))
+    v_base        = float(p.get("v_base", 0.55))
+    alpha_th      = float(p.get("alpha_th", 0.25))
 
     random.seed(seed); np.random.seed(seed)
     tasks     = generate_task_batch(num_tasks)
     fog_nodes = generate_fog_nodes(num_fog_nodes)
 
     fixed_fda    = FixedFuzzyFDA()
-    adaptive_fda = AdaptiveFuzzyFDA(v_base=0.55, alpha=0.25)
+    adaptive_fda = AdaptiveFuzzyFDA(v_base=v_base, alpha=alpha_th)
     fixed_cls    = run_streaming_classification(tasks, fog_nodes, fixed_fda)
     adaptive_cls = run_streaming_classification(tasks, fog_nodes, adaptive_fda)
     fixed_sorted    = sorted(fixed_cls["fog_tasks"], key=lambda t: t["fuzzy_weight"])
@@ -174,20 +176,27 @@ def run_ablation():
 def run_burst():
     p = request.get_json(force=True) or {}
     seed = int(p.get("seed", 99))
+    num_fog_nodes = int(p.get("num_fog_nodes", 30))
+    v_base        = float(p.get("v_base", 0.55))
+    alpha_th      = float(p.get("alpha_th", 0.30))
+    num_tasks     = int(p.get("num_tasks", 300))
     random.seed(seed); np.random.seed(seed)
+    p1 = int(num_tasks * 0.28) # ~28% base
+    p2 = int(num_tasks * 0.44) # ~44% burst spike
+    p3 = num_tasks - (p1 + p2)
 
     tasks, tid = [], 0
-    for _ in range(100): tasks.append(generate_task(tid)); tid += 1
-    for _ in range(150): tasks.append(generate_task(tid)); tid += 1
-    for _ in range(100): tasks.append(generate_task(tid)); tid += 1
+    for _ in range(p1): tasks.append(generate_task(tid)); tid += 1
+    for _ in range(p2): tasks.append(generate_task(tid)); tid += 1
+    for _ in range(p3): tasks.append(generate_task(tid)); tid += 1
 
-    fog_nodes = generate_fog_nodes(15)
+    fog_nodes = generate_fog_nodes(num_fog_nodes)
 
     NORMAL_DECAY, BURST_DECAY = 0.80, 0.975
-    decay_schedule = [NORMAL_DECAY]*100 + [BURST_DECAY]*150 + [NORMAL_DECAY]*100
+    decay_schedule = [NORMAL_DECAY]*p1 + [BURST_DECAY]*p2 + [NORMAL_DECAY]*p3
 
     fixed_fda    = FixedFuzzyFDA()
-    adaptive_fda = AdaptiveFuzzyFDA(v_base=0.55, alpha=0.30)
+    adaptive_fda = AdaptiveFuzzyFDA(v_base=v_base, alpha=alpha_th)
 
     fixed_cls    = run_streaming_classification(tasks, fog_nodes, fixed_fda, decay_schedule)
     adaptive_cls = run_streaming_classification(tasks, fog_nodes, adaptive_fda, decay_schedule)
@@ -201,15 +210,15 @@ def run_burst():
     fixed_load    = [round(v, 3) for v in fixed_cls["load_trace"]]
     adaptive_load = [round(v, 3) for v in adaptive_cls["load_trace"]]
 
-    burst_fixed_avg    = float(np.mean(fixed_load[100:250]))
-    burst_adaptive_avg = float(np.mean(adaptive_load[100:250]))
+    burst_fixed_avg    = float(np.mean(fixed_load[p1:p1+p2]))
+    burst_adaptive_avg = float(np.mean(adaptive_load[p1:p1+p2]))
     reduction_pct = (1 - burst_adaptive_avg / max(burst_fixed_avg, 1e-9)) * 100
 
     return jsonify({
         "status": "ok",
         "fixed_rate": fixed_rate, "adaptive_rate": adaptive_rate,
         "fixed_load": fixed_load, "adaptive_load": adaptive_load,
-        "burst_window": [100, 250],
+        "burst_window": [p1, p1+p2],
         "burst_fixed_avg": round(burst_fixed_avg, 4),
         "burst_adaptive_avg": round(burst_adaptive_avg, 4),
         "reduction_pct": round(reduction_pct, 1),
