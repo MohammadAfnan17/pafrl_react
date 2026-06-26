@@ -21,7 +21,8 @@ from simulation.scheduler import (
 )
 
 app = Flask(__name__)
-CORS(app)
+# Enable CORS globally across endpoints to prevent preflight errors on render/vercel
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 DEFAULT_CONFIG = {
     "num_tasks": 300,
@@ -50,7 +51,6 @@ DEFAULT_CONFIG = {
     },
 }
 
-
 def _bool_param(value, default):
     if isinstance(value, bool):
         return value
@@ -58,23 +58,29 @@ def _bool_param(value, default):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return default if value is None else bool(value)
 
-
 def _int_param(payload, key, minimum, maximum):
-    value = int(payload.get(key, DEFAULT_CONFIG[key]))
-    return max(minimum, min(maximum, value))
-
+    try:
+        value = int(payload.get(key, DEFAULT_CONFIG[key]))
+        return max(minimum, min(maximum, value))
+    except (ValueError, TypeError):
+        return DEFAULT_CONFIG[key]
 
 def _float_param(payload, key, minimum, maximum):
-    value = float(payload.get(key, DEFAULT_CONFIG[key]))
-    return max(minimum, min(maximum, value))
-
+    try:
+        value = float(payload.get(key, DEFAULT_CONFIG[key]))
+        return max(minimum, min(maximum, value))
+    except (ValueError, TypeError):
+        return DEFAULT_CONFIG[key]
 
 def parse_config(payload):
     payload = payload or {}
     priority_payload = payload.get("priority_weights") or {}
     priority_weights = {}
     for name, default in DEFAULT_CONFIG["priority_weights"].items():
-        priority_weights[name] = max(0.0, float(priority_payload.get(name, default)))
+        try:
+            priority_weights[name] = max(0.0, float(priority_payload.get(name, default)))
+        except (ValueError, TypeError):
+            priority_weights[name] = default
 
     cap_min = _int_param(payload, "fog_cap_min", 100, 20000)
     cap_max = _int_param(payload, "fog_cap_max", 100, 30000)
@@ -102,10 +108,9 @@ def parse_config(payload):
         "sarsa_epsilon": _float_param(payload, "sarsa_epsilon", 0.0, 1.0),
         "epsilon_start": epsilon_start,
         "epsilon_end": epsilon_end,
-        "task_log_limit": _int_param(payload, "task_log_limit", 1, 500),
+        "task_log_limit": _int_param(payload, "task_log_limit", 1, 2000), # Increased ceiling for logs
         "priority_weights": priority_weights,
     }
-
 
 def make_tasks_and_nodes(config):
     tasks = generate_task_batch(
@@ -121,7 +126,6 @@ def make_tasks_and_nodes(config):
     )
     return tasks, fog_nodes
 
-
 def make_scheduler(fog_nodes, config, use_priority=None):
     return PrioritySARSAScheduler(
         fog_nodes,
@@ -134,41 +138,31 @@ def make_scheduler(fog_nodes, config, use_priority=None):
         epsilon_end=config["epsilon_end"],
     )
 
-# ── CORS (manual, since flask-cors isn't installed) ──────
-# @app.after_request
-# def add_cors(resp):
-#     resp.headers["Access-Control-Allow-Origin"] = "*"
-#     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
-#     resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-#     return resp
-
-# @app.route("/api/<path:path>", methods=["OPTIONS"])
-# def options_handler(path):
-#     return jsonify({})
-
+# Cache storage placeholder to support post-simulation paginated log indexing
+SIMULATION_CACHE = {
+    "last_log": []
+}
 
 # ════════════════════════════════════════════════════════
-# /api/health
+# HEALTH ENDPOINTS (Fixed prefix rules to map frontend calls)
 # ════════════════════════════════════════════════════════
+@app.route("/health")
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok", "system": "PAFRL"})
+    return jsonify({"status": "ok", "system": "PAFRL", "message": "Server routing sync successful"})
 
 
 # ════════════════════════════════════════════════════════
-# /api/run  -- Full pipeline in one call
-# Params: num_tasks, num_fog_nodes, episodes, seed,
-#         v_base, alpha_th, use_priority, use_adaptive
+# /run -- Full pipeline in one call
 # ════════════════════════════════════════════════════════
+@app.route("/run", methods=["POST"])
 @app.route("/api/run", methods=["POST"])
 def run_pipeline():
     config = parse_config(request.get_json(silent=True))
 
     random.seed(config["seed"]); np.random.seed(config["seed"])
-
     tasks, fog_nodes = make_tasks_and_nodes(config)
 
-    # ── Stage 1: Classification ──────────────────────────
     if config["use_adaptive"]:
         fda = AdaptiveFuzzyFDA(v_base=config["v_base"], alpha=config["alpha_th"])
     else:
@@ -177,21 +171,21 @@ def run_pipeline():
     cls = run_streaming_classification(tasks, fog_nodes, fda)
     fog_tasks_sorted = sorted(cls["fog_tasks"], key=lambda t: t["fuzzy_weight"])
 
-    # ── Stage 2: Scheduling ───────────────────────────────
     random.seed(config["seed"]); np.random.seed(config["seed"])
     sarsa = make_scheduler(fog_nodes, config)
     rewards = sarsa.train(fog_tasks_sorted)
     log = sarsa.schedule(fog_tasks_sorted)
+    
+    # Store complete trace in memory context to support dynamic window slicing
+    SIMULATION_CACHE["last_log"] = log
     metrics = calc_metrics(log)
 
-    # ── Baselines (same fog task set, fresh seed) ────────
     random.seed(config["seed"]); np.random.seed(config["seed"])
     fcfs_log = fcfs(fog_tasks_sorted, fog_nodes)
     edf_log  = edf(fog_tasks_sorted, fog_nodes)
     gfe_log  = gfe(fog_tasks_sorted, fog_nodes)
     fcfs_m, edf_m, gfe_m = calc_metrics(fcfs_log), calc_metrics(edf_log), calc_metrics(gfe_log)
 
-    # ── Fog node utilisation ──────────────────────────────
     counts = {}
     for r in log:
         counts[r["fog_node"]] = counts.get(r["fog_node"], 0) + 1
@@ -201,10 +195,12 @@ def run_pipeline():
         "utilisation": round(counts.get(fn["id"], 0) / max(len(fog_tasks_sorted), 1) * 100, 1),
     } for fn in fog_nodes]
 
-    # ── Threshold trace (down-sampled for transport) ──────
     th_trace = cls.get("threshold_load_only_trace", cls["threshold_trace"])
     load_trace = cls["load_trace"]
     step = max(1, len(th_trace) // 150)
+
+    # Clean default return uses task_log_limit ceiling passed from client state UI
+    limit = config["task_log_limit"]
 
     return jsonify({
         "status": "ok",
@@ -220,13 +216,42 @@ def run_pipeline():
         },
         "rewards": rewards[::max(1, len(rewards)//150)],
         "fog_nodes": fog_node_stats,
-        "task_log": log[:config["task_log_limit"]],
+        "task_log": log[:limit],
+        "total_fog_tasks": len(log)
     })
 
 
 # ════════════════════════════════════════════════════════
-# /api/ablation -- 2x2 ablation matrix
+# DYNAMIC TASK LOGS PAGINATION (Sprint 2 Execution Niche)
 # ════════════════════════════════════════════════════════
+@app.route("/logs", methods=["GET"])
+@app.route("/api/logs", methods=["GET"])
+def get_paginated_logs():
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        limit = max(1, min(100, int(request.args.get("limit", 20))))
+    except ValueError:
+        page, limit = 1, 20
+
+    all_logs = SIMULATION_CACHE["last_log"]
+    total = len(all_logs)
+    
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    
+    return jsonify({
+        "status": "ok",
+        "page": page,
+        "limit": limit,
+        "total_records": total,
+        "task_log": all_logs[start_idx:end_idx]
+    })
+
+
+# ════════════════════════════════════════════════════════
+# /api/ablation
+# ════════════════════════════════════════════════════════
+@app.route("/ablation", methods=["POST"])
 @app.route("/api/ablation", methods=["POST"])
 def run_ablation():
     config = parse_config(request.get_json(silent=True))
@@ -259,8 +284,9 @@ def run_ablation():
 
 
 # ════════════════════════════════════════════════════════
-# /api/burst -- burst-load stress test
+# /api/burst
 # ════════════════════════════════════════════════════════
+@app.route("/burst", methods=["POST"])
 @app.route("/api/burst", methods=["POST"])
 def run_burst():
     payload = request.get_json(silent=True) or {}
@@ -319,10 +345,9 @@ def run_burst():
         "reduction_pct": round(reduction_pct, 1),
     })
 
-
 if __name__ == "__main__":
     print("\n" + "="*50)
-    print("  PAFRL Backend API")
-    print("  http://localhost:5000/api/health")
+    print("  PAFRL Backend Engine Online")
+    print("  Listening locally at: http://localhost:5000")
     print("="*50 + "\n")
     app.run(debug=True, port=5000, host="0.0.0.0")
