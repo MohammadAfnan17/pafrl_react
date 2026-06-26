@@ -40,9 +40,12 @@ TASK_TYPES = [
 ]
 
 
-def generate_task(task_id, arrival_time=0.0):
+def generate_task(task_id, arrival_time=0.0, priority_weights=None):
     """Generate one random task with priority (Novel Contribution #1)"""
     t = random.choice(TASK_TYPES)
+    weights = priority_weights or {
+        name: cfg["weight"] for name, cfg in PRIORITY_LEVELS.items()
+    }
     return {
         "id":           task_id,
         "type":         t["name"],
@@ -50,14 +53,14 @@ def generate_task(task_id, arrival_time=0.0):
         "data_size":    round(random.uniform(*t["ds"]), 2),
         "instructions": random.randint(*t["ins"]),
         "priority":     t["priority"],
-        "priority_weight": PRIORITY_LEVELS[t["priority"]]["weight"],
+        "priority_weight": float(weights.get(t["priority"], PRIORITY_LEVELS[t["priority"]]["weight"])),
         "arrival_time": round(arrival_time, 2),   # ms, simulation clock
         "destination":  None,
         "fog_node_id":  None,
     }
 
 
-def generate_task_batch(n, mean_inter_arrival_ms=60.0):
+def generate_task_batch(n, mean_inter_arrival_ms=60.0, priority_weights=None):
     """
     Generate a stream of tasks with realistic Poisson-process arrivals.
     Tasks do NOT all appear at t=0 -- they arrive over time, so fog
@@ -67,7 +70,7 @@ def generate_task_batch(n, mean_inter_arrival_ms=60.0):
     tasks = []
     t_now = 0.0
     for i in range(n):
-        tasks.append(generate_task(i, arrival_time=t_now))
+        tasks.append(generate_task(i, arrival_time=t_now, priority_weights=priority_weights))
         # Exponential inter-arrival time (Poisson process)
         t_now += random.expovariate(1.0 / mean_inter_arrival_ms)
     return tasks

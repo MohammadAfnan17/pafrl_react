@@ -11,8 +11,8 @@ export default function TaskLogTable({ log }) {
         TASK SCHEDULING LOG (PA-FRL)
         <span className="badge">{log.length} SHOWN</span>
       </div>
-      <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+      <div className="table-scroll">
+        <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr>
               {['ID', 'TYPE', 'PRIORITY', 'DEADLINE', 'SERVICE TIME', 'FOG NODE', 'MET?'].map((h) => (

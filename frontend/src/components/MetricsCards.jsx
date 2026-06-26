@@ -17,7 +17,7 @@ export default function MetricsCards({ metrics }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="card-title">PA-FRL PERFORMANCE METRICS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+      <div className="metrics-grid">
         {cards.map((c, i) => (
           <div key={i} style={{
             background: 'var(--surface)', border: '1px solid var(--border)',

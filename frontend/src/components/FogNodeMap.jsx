@@ -13,15 +13,11 @@ export default function FogNodeMap({ fogNodes }) {
         maxHeight: 260, overflowY: 'auto', paddingRight: 4,
       }}>
         {fogNodes.map((fn) => (
-          <div key={fn.id} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '8px 12px',
-          }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)', width: 28 }}>
+          <div key={fn.id} className="fog-node-row">
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)' }}>
               F{fn.id}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--muted)', width: 76 }}>
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
               {fn.capacity} MIPS
             </span>
             <div style={{ flex: 1, height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -32,7 +28,7 @@ export default function FogNodeMap({ fogNodes }) {
                 transition: 'width .6s ease',
               }} />
             </div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, width: 90, textAlign: 'right' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
               {fn.tasks} tasks ({fn.utilisation}%)
             </span>
           </div>

@@ -17,6 +17,22 @@ const DEFAULT_PARAMS = {
   seed: 7,
   v_base: 0.55,
   alpha_th: 0.25,
+  mean_inter_arrival_ms: 60,
+  fog_cap_min: 1500,
+  fog_cap_max: 6500,
+  fog_bandwidth: 1000,
+  sarsa_alpha: 0.7,
+  sarsa_gamma: 0.95,
+  sarsa_epsilon: 0.5,
+  epsilon_start: 0.9,
+  epsilon_end: 0.05,
+  task_log_limit: 40,
+  priority_weights: {
+    CRITICAL: 8.0,
+    HIGH: 3.0,
+    MEDIUM: 1.0,
+    LOW: 0.3,
+  },
   use_priority: true,
   use_adaptive: true,
 }
@@ -73,7 +89,7 @@ export default function App() {
     setStatus('Running burst-load stress test...')
     setActiveTab('burst')
     try {
-      const data = await api.burst({ seed: params.seed })
+      const data = await api.burst(params)
       setBurst(data)
       setStatus(`✓ Burst test complete — ${data.reduction_pct}% fog load reduction during burst`)
     } catch (e) {
@@ -84,38 +100,30 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
-      <header style={{
-        padding: '18px 28px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: 'linear-gradient(180deg, rgba(0,212,255,.06), transparent)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: 10, background: 'var(--accent)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-            boxShadow: '0 0 20px rgba(0,212,255,.4)',
-          }}>⚡</div>
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="brand">
+          <div className="brand-icon">⚡</div>
           <div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 18, color: 'var(--accent)', letterSpacing: 3 }}>PA-FRL</div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1 }}>
+            <div className="brand-title">PA-FRL</div>
+            <div className="brand-subtitle">
               PRIORITY-AWARE ADAPTIVE FUZZY REINFORCEMENT LEARNING · React + Python3
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="api-status">
           <span style={{
             width: 8, height: 8, borderRadius: '50%',
             background: apiOnline ? 'var(--green)' : 'var(--red)',
             boxShadow: apiOnline ? '0 0 8px var(--green)' : 'none',
           }} />
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>
+          <span>
             {apiOnline ? 'Flask API Connected' : 'API Offline'}
           </span>
         </div>
       </header>
 
-      <main style={{ padding: '20px 28px', maxWidth: 1300, margin: '0 auto' }}>
+      <main className="app-main">
         <ControlPanel
           params={params}
           setParams={setParams}
@@ -126,7 +134,7 @@ export default function App() {
           status={status}
         />
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div className="tab-row">
           {['run', 'ablation', 'burst'].map((tab) => (
             <button
               key={tab}

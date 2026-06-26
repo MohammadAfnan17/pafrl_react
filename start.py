@@ -11,21 +11,20 @@ import subprocess, sys, os, time, webbrowser, threading, shutil
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.join(ROOT, "backend")
 FRONTEND = os.path.join(ROOT, "frontend")
+VENV = os.path.join(BACKEND, "venv")
+VENV_PYTHON = os.path.join(VENV, "bin", "python")
+REQUIREMENTS = os.path.join(BACKEND, "requirements.txt")
 
 
-def check_python_deps():
-    missing = []
-    for pkg in ["flask", "numpy", "sklearn"]:
-        try:
-            __import__(pkg)
-        except ImportError:
-            missing.append(pkg)
-    if missing:
-        print(f"Installing missing Python packages: {missing}")
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
-            "flask", "numpy", "scikit-learn", "--break-system-packages", "-q"
-        ])
+def ensure_backend_venv():
+    if not os.path.exists(VENV_PYTHON):
+        print("Creating backend virtual environment...")
+        subprocess.check_call([sys.executable, "-m", "venv", VENV])
+
+    print("Installing backend dependencies into backend/venv...")
+    subprocess.check_call([
+        VENV_PYTHON, "-m", "pip", "install", "-r", REQUIREMENTS, "-q"
+    ])
 
 
 def check_node():
@@ -52,13 +51,13 @@ if __name__ == "__main__":
     print("  React + Python3 Full-Stack Demo")
     print("=" * 55)
 
-    check_python_deps()
+    ensure_backend_venv()
     check_node()
     install_frontend_deps()
 
     print("\nStarting Flask backend (port 5000)...")
     backend_proc = subprocess.Popen(
-        [sys.executable, "app.py"], cwd=BACKEND
+        [VENV_PYTHON, "app.py"], cwd=BACKEND
     )
 
     time.sleep(2)

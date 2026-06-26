@@ -96,13 +96,16 @@ def calc_fog_overload(node_loads_history, threshold=0.8):
 # ════════════════════════════════════════════════════════
 class PrioritySARSAScheduler:
     def __init__(self, fog_nodes, alpha=0.7, gamma=0.95,
-                 epsilon=0.5, episodes=300, use_priority=True):
+                 epsilon=0.5, episodes=300, use_priority=True,
+                 epsilon_start=0.9, epsilon_end=0.05):
         self.nodes        = fog_nodes
         self.alpha        = alpha
         self.gamma        = gamma
         self.epsilon      = epsilon
         self.episodes     = episodes
         self.use_priority = use_priority   # toggle for ablation study
+        self.epsilon_start = epsilon_start
+        self.epsilon_end   = epsilon_end
         self.Q            = {}
         self.rewards      = []
         self.load_history = []   # tracks fog load over time (for overload metric)
@@ -131,7 +134,9 @@ class PrioritySARSAScheduler:
         nS, nA = len(tasks), len(self.nodes)
         self.Q = {s: [0.0]*nA for s in range(nS)}
         self.rewards = []
-        eps_start, eps_end = 0.9, 0.05
+        if nS == 0 or nA == 0:
+            return self.rewards
+        eps_start, eps_end = self.epsilon_start, self.epsilon_end
 
         for ep in range(self.episodes):
             # Linear epsilon decay: explore early, exploit later

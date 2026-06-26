@@ -21,7 +21,7 @@ export default function BurstChart({ burst }) {
         BURST-LOAD STRESS TEST
         <span className="badge badge-g">{burst.reduction_pct}% LOAD REDUCTION</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="chart-grid">
         <div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textAlign: 'center' }}>
             Fraction Routed to Fog (rolling)

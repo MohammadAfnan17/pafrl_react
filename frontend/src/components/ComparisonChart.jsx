@@ -17,7 +17,7 @@ export default function ComparisonChart({ metrics }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="card-title">ALGORITHM COMPARISON</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="chart-grid">
         <div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textAlign: 'center' }}>
             Average Service Time (ms)

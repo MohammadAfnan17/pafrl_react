@@ -20,7 +20,7 @@ export default function ThresholdChart({ classification, params }) {
           FOG {classification.fog_pct}% / CLOUD {classification.cloud_pct}%
         </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="chart-grid">
         <div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, textAlign: 'center' }}>
             Real-Time Fog Load Signal
