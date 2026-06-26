@@ -1,4 +1,4 @@
-const API_BASE = '/api'
+const API_BASE = 'https://priority-aware-adaptive-frl.onrender.com'
 
 async function post(path, body) {
   const res = await fetch(`${API_BASE}${path}`, {
